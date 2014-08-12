@@ -43,26 +43,55 @@ var track_favoriters = function(id) {
 };
 
 var result_set = me('1-56332-48830-d09c9efa96c76587d0').then(function(user) {
-    return when.promise(function(resolve, reject) {
-        user_favorites(user.id)
-            .then(function(tracks) {
-                when.map(tracks, guard(guard.n(10), function(track, i) { return track_favoriters(track.id); }))
-                    .then(function(users) {
-                        var result_user_set = [];
-                        [].concat.apply([], users).forEach(guard(guard.n(10), function(user) {
-                            if(result_user_set.indexOf(user.id)==-1) {
-                                result_user_set.push(user.id);
-                                var puser = when.defer();
-                                prediction.users.create({ pio_uid: user.id }, nodefn.createCallback(puser.resolver));
-                                puser.promise.then(function(res) {
-                                    console.log('user', user.id);
-                                }, function(err) {
-                                    console.log(err);
-                                });
-                            }
-                            resolve(result_user_set);
-                        }));
-                    });
-            });
-    });
+    create_action(user, 2);
 });
+
+var users  = [];
+var tracks = [];
+var create_action = function(user, level) {
+    var action = when.defer();
+    if(users.indexOf(user.id) > -1) {
+        action.resolve({ 'message': 'Processed already' });
+        return action.promise;
+    }
+    var puser = when.defer();
+    prediction.users.create({ pio_uid: user.id }, nodefn.createCallback(puser.resolver)).then(function(resolved) {
+        level = level || 1;
+        console.log('level', level);
+        console.log('user', user.id);
+        users.push(user.id);
+        when.map(user_favorites(user.id), guard(guard.n(10), function(track, i) {
+            var ptrack = when.defer();
+            if(tracks.indexOf(track.id) == -1) {
+                tracks.push(track.id);
+                var ptrack = when.defer();
+                prediction.items.create({ pio_iid: track.id, pio_itypes: 'track' }, nodefn.createCallback(ptrack.resolver));
+
+                ptrack.promise.then(function(resolve) {
+                    prediction.users.createAction({
+                        pio_uid: user.id,
+                        pio_iid: track.id,
+                        pio_action: 'like',
+                    },  function(err, res) { //Do something
+                    });
+                    var more = level - 1;
+                    if(more > 0) {
+                        when.map(track_favoriters(track.id), function(favoriter, i) {
+                            create_action(favoriter, more).then(function(resolved) {
+                                ptrack.resolve(resolved);
+                            }, function(rejected) {
+                                ptrack.reject(rejected);
+                            });
+                        });
+                    } else {
+                        ptrack.resolve();
+                    }
+                });
+            }
+            return ptrack.promise;
+        })).then(function(resolved) { action.resolve(resolved); }, function(rejected) { action.reject(rejected) });
+    }, function(rejected) {
+        action.reject(rejected);
+    });
+    return action.promise;
+};
