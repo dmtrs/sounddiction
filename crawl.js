@@ -14,15 +14,28 @@ client.getMe(function(err, res) {
         user.resolve(res);
     }
 });
-user.promise.then(function(user) {
+
+var user_favorites = function(id, cb) {
     client.get('/users/{id}/favorites', function(err, data) {
+        (err) ? cb(err) : cb(null, data);
+    });
+};
+var track_favoriters = function(id, cb) {
+    client.get('/tracks/'+id+'/favoriters', function(err, data) {
+        (err) ? cb(err) : cb(null, data);
+    });
+};
+
+user.promise.then(function(user) {
+    users.push(user.id);
+    user_favorites(user.id, function(err, data) {
         if(err) throw err;
-        for(var i in data)
-        {
-            client.get('/tracks/'+data[i].id+'/favoriters', function(err, data) {
-                console.log(data.length);
+        data.forEach(function(track) {
+            track_favoriters(track.id, function(err, data) {
+                if(err) throw err;
+                data.forEach(function(favoriter) { users.push(favoriter.id); });
             });
-        }
+        });
     });
 }, function(err) {
     if(err) throw err;
