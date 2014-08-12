@@ -11,6 +11,7 @@
   "dependencies": {
     "soundcloud-node": "0.0.8",
     "express": "~4.8.2",
-    "when": "~3.4.3"
+    "when": "~3.4.3",
+    "predictionio": "0.0.7"
   }
 }
